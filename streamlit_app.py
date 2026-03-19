@@ -458,6 +458,273 @@ QUIZ_TEMPLATES = [
         "prompt_hint": "This is the franchise that has simply won more than anyone. Tell the story through their dominance — city, home ground, colours, the captains who led them — without naming the team.",
         "answer_type": "team",
     },
+    # ── Category 1: Venue Specialists ─────────────────────
+    {
+        "id": "venue_sr_wankhede",
+        "sql": """SELECT d.batsman as answer,
+                  ROUND(SUM(d.batsman_runs)*100.0/SUM(CASE WHEN d.is_wide=0 THEN 1 ELSE 0 END),1) as val,
+                  SUM(CASE WHEN d.is_wide=0 THEN 1 ELSE 0 END) as balls,
+                  COUNT(DISTINCT d.match_id) as matches
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  WHERE LOWER(m.venue) LIKE '%wankhede%' AND d.is_wide=0
+                  GROUP BY d.batsman HAVING balls >= 150 ORDER BY val DESC LIMIT 8""",
+        "context_sql": """SELECT SUM(d.batsman_runs) as venue_runs,
+                  SUM(CASE WHEN d.is_wide=0 THEN 1 ELSE 0 END) as venue_balls,
+                  COUNT(DISTINCT d.match_id) as venue_matches,
+                  ROUND(SUM(d.batsman_runs)*100.0/NULLIF(SUM(CASE WHEN d.is_wide=0 THEN 1 ELSE 0 END),0),1) as overall_sr
+                  FROM deliveries d WHERE d.batsman=?""",
+        "stat_label": "strike rate at Wankhede Stadium among batters with 150+ balls there",
+        "prompt_hint": "Some grounds suit certain players. This batter and Wankhede have a relationship the groundstaff would rather forget. Hint at the contrast between their overall career and what they do at this specific venue — the numbers at Wankhede are disproportionately violent.",
+    },
+    {
+        "id": "venue_runs_chinnaswamy",
+        "sql": """SELECT d.batsman as answer, SUM(d.batsman_runs) as val,
+                  COUNT(DISTINCT d.match_id) as matches
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  WHERE LOWER(m.venue) LIKE '%chinnaswamy%'
+                  GROUP BY d.batsman HAVING matches >= 5 ORDER BY val DESC LIMIT 8""",
+        "context_sql": """SELECT SUM(d.batsman_runs) as venue_runs,
+                  COUNT(DISTINCT d.match_id) as venue_matches,
+                  ROUND(SUM(d.batsman_runs)*100.0/NULLIF(SUM(CASE WHEN d.is_wide=0 THEN 1 ELSE 0 END),0),1) as venue_sr
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  WHERE LOWER(m.venue) LIKE '%chinnaswamy%' AND d.batsman=?""",
+        "stat_label": "runs at M Chinnaswamy Stadium — the highest-scoring ground in IPL history",
+        "prompt_hint": "Chinnaswamy is the stadium that turns decent scores into impossible ones. Short boundaries, fast outfield, thin Bangalore air. One batter has feasted here more than anyone. Hint at the fact that they also call this city home — and what it means to dominate your own fortress.",
+    },
+    {
+        "id": "venue_economy_eden",
+        "sql": """SELECT d.bowler as answer,
+                  ROUND(SUM(d.batsman_runs+d.extras)*6.0/NULLIF(SUM(CASE WHEN d.is_wide=0 AND d.is_no_ball=0 THEN 1 ELSE 0 END),0),2) as val,
+                  SUM(CASE WHEN d.is_wide=0 AND d.is_no_ball=0 THEN 1 ELSE 0 END) as balls
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  WHERE LOWER(m.venue) LIKE '%eden%' AND d.is_wide=0
+                  GROUP BY d.bowler HAVING balls >= 150 ORDER BY val LIMIT 8""",
+        "context_sql": """SELECT SUM(CASE WHEN d.dismissal_kind IS NOT NULL AND d.dismissal_kind NOT IN
+                  ('run out','retired hurt','retired out','obstructing the field') THEN 1 ELSE 0 END) as wickets,
+                  COUNT(DISTINCT d.match_id) as matches,
+                  ROUND(SUM(d.batsman_runs+d.extras)*6.0/NULLIF(SUM(CASE WHEN d.is_wide=0 AND d.is_no_ball=0 THEN 1 ELSE 0 END),0),2) as career_economy
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  WHERE LOWER(m.venue) LIKE '%eden%' AND d.bowler=?""",
+        "stat_label": "economy rate at Eden Gardens among bowlers with 150+ balls there",
+        "prompt_hint": "Eden Gardens is supposed to be a batsman's paradise — 66,000 people willing them to hit. This bowler turned it into their personal laboratory. Hint at the dew, the pitch, and how this bowler found a way to be miserly in the one ground where miserliness seems impossible.",
+    },
+    # ── Category 2: Season Dominance ──────────────────────────
+    {
+        "id": "most_wickets_season",
+        "sql": """SELECT d.bowler as answer,
+                  SUM(CASE WHEN d.dismissal_kind IS NOT NULL AND d.dismissal_kind NOT IN
+                  ('run out','retired hurt','retired out','obstructing the field') THEN 1 ELSE 0 END) as val,
+                  m.year as extra
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  GROUP BY d.bowler, m.year ORDER BY val DESC LIMIT 8""",
+        "context_sql": """SELECT COUNT(DISTINCT d.match_id) as matches,
+                  ROUND(SUM(d.batsman_runs+d.extras)*6.0/NULLIF(SUM(CASE WHEN d.is_wide=0 AND d.is_no_ball=0 THEN 1 ELSE 0 END),0),2) as season_economy
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  WHERE d.bowler=? AND m.year=?""",
+        "stat_label": "wickets in a single IPL season — the record",
+        "prompt_hint": "Most bowlers have one purple patch in a season and fade. This one was relentless across an entire edition — a wicket every few overs, match after match. Hint at the year, the number, and the fact that the team still couldn't convert that individual brilliance into a trophy.",
+        "extra_context_param": True,
+    },
+    {
+        "id": "best_economy_season",
+        "sql": """SELECT d.bowler as answer,
+                  ROUND(SUM(d.batsman_runs+d.extras)*6.0/NULLIF(SUM(CASE WHEN d.is_wide=0 AND d.is_no_ball=0 THEN 1 ELSE 0 END),0),2) as val,
+                  m.year as extra,
+                  SUM(CASE WHEN d.is_wide=0 AND d.is_no_ball=0 THEN 1 ELSE 0 END) as balls
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  GROUP BY d.bowler, m.year HAVING balls >= 200 ORDER BY val LIMIT 8""",
+        "context_sql": """SELECT COUNT(DISTINCT d.match_id) as matches,
+                  SUM(CASE WHEN d.dismissal_kind IS NOT NULL AND d.dismissal_kind NOT IN
+                  ('run out','retired hurt','retired out','obstructing the field') THEN 1 ELSE 0 END) as wickets
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  WHERE d.bowler=? AND m.year=?""",
+        "stat_label": "economy rate in a single IPL season (min 200 balls) — the most miserly single-season performance",
+        "prompt_hint": "Keeping T20 batters under 6 an over for a full season is considered nearly impossible. This bowler did it while barely breaking a sweat. Hint at their bowling style — the kind that makes batters look foolish rather than unlucky — and the year it happened.",
+        "extra_context_param": True,
+    },
+    # ── Category 3: Head-to-Head ───────────────────────────────
+    {
+        "id": "most_runs_vs_mi",
+        "sql": """SELECT d.batsman as answer, SUM(d.batsman_runs) as val,
+                  COUNT(DISTINCT d.match_id) as matches
+                  FROM deliveries d
+                  WHERE d.bowling_team='Mumbai Indians'
+                  GROUP BY d.batsman HAVING matches >= 8 ORDER BY val DESC LIMIT 8""",
+        "context_sql": """SELECT SUM(d.batsman_runs) as runs_vs_mi,
+                  COUNT(DISTINCT d.match_id) as matches_vs_mi,
+                  ROUND(SUM(d.batsman_runs)*100.0/NULLIF(SUM(CASE WHEN d.is_wide=0 THEN 1 ELSE 0 END),0),1) as sr_vs_mi
+                  FROM deliveries d WHERE d.bowling_team='Mumbai Indians' AND d.batsman=?""",
+        "stat_label": "runs against Mumbai Indians — more than any other batter in IPL history",
+        "prompt_hint": "Mumbai Indians have the best bowling attack money can buy. They have tried everything against this batter — pace, spin, bouncers, yorkers. Nothing has worked consistently. Hint at the volume of runs and the number of encounters, and what it says about a batter who has made one of the great franchises feel helpless.",
+    },
+    {
+        "id": "most_runs_vs_csk",
+        "sql": """SELECT d.batsman as answer, SUM(d.batsman_runs) as val,
+                  COUNT(DISTINCT d.match_id) as matches
+                  FROM deliveries d
+                  WHERE d.bowling_team IN ('Chennai Super Kings','Rising Pune Supergiant','Rising Pune Supergiants')
+                  GROUP BY d.batsman HAVING matches >= 8 ORDER BY val DESC LIMIT 8""",
+        "context_sql": """SELECT SUM(d.batsman_runs) as runs_vs_csk,
+                  COUNT(DISTINCT d.match_id) as matches_vs_csk,
+                  ROUND(SUM(d.batsman_runs)*100.0/NULLIF(SUM(CASE WHEN d.is_wide=0 THEN 1 ELSE 0 END),0),1) as sr_vs_csk
+                  FROM deliveries d
+                  WHERE d.bowling_team IN ('Chennai Super Kings','Rising Pune Supergiant','Rising Pune Supergiants')
+                  AND d.batsman=?""",
+        "stat_label": "runs against Chennai Super Kings — more than any other batter",
+        "prompt_hint": "CSK are famous for knowing their opponents inside out — they plan, they adapt, they contain. Against this batter, those plans have repeatedly come unstuck. Hint at the number of times they have met, the runs that have piled up, and the quiet indignity of being the one franchise a batter has simply owned.",
+    },
+    # ── Category 4: Clutch / High-Stakes ──────────────────────
+    {
+        "id": "most_runs_playoffs",
+        "sql": """SELECT d.batsman as answer, SUM(d.batsman_runs) as val,
+                  COUNT(DISTINCT d.match_id) as matches
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  WHERE m.match_stage NOT IN ('League') AND d.is_wide=0
+                  GROUP BY d.batsman HAVING matches >= 8 ORDER BY val DESC LIMIT 8""",
+        "context_sql": """SELECT SUM(d.batsman_runs) as playoff_runs,
+                  COUNT(DISTINCT d.match_id) as playoff_matches,
+                  ROUND(SUM(d.batsman_runs)*100.0/NULLIF(SUM(CASE WHEN d.is_wide=0 THEN 1 ELSE 0 END),0),1) as playoff_sr
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  WHERE m.match_stage NOT IN ('League') AND d.batsman=?""",
+        "stat_label": "runs in IPL knockout matches — more than any batter in history",
+        "prompt_hint": "League cricket and knockout cricket are different sports. One rewards consistency, the other rewards nerve. This batter has been at their best precisely when the margin for error disappears. Hint at the number of playoff matches they have played and what their runs record in those games reveals about their temperament.",
+    },
+    {
+        "id": "most_wickets_playoffs",
+        "sql": """SELECT d.bowler as answer,
+                  SUM(CASE WHEN d.dismissal_kind IS NOT NULL AND d.dismissal_kind NOT IN
+                  ('run out','retired hurt','retired out','obstructing the field') THEN 1 ELSE 0 END) as val,
+                  COUNT(DISTINCT d.match_id) as matches
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  WHERE m.match_stage NOT IN ('League')
+                  GROUP BY d.bowler HAVING matches >= 8 ORDER BY val DESC LIMIT 8""",
+        "context_sql": """SELECT SUM(CASE WHEN d.dismissal_kind IS NOT NULL AND d.dismissal_kind NOT IN
+                  ('run out','retired hurt','retired out','obstructing the field') THEN 1 ELSE 0 END) as playoff_wickets,
+                  COUNT(DISTINCT d.match_id) as playoff_matches,
+                  ROUND(SUM(d.batsman_runs+d.extras)*6.0/NULLIF(SUM(CASE WHEN d.is_wide=0 AND d.is_no_ball=0 THEN 1 ELSE 0 END),0),2) as playoff_economy
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  WHERE m.match_stage NOT IN ('League') AND d.bowler=?""",
+        "stat_label": "wickets in IPL playoff matches — more than any bowler in history",
+        "prompt_hint": "Knockout cricket is where reputations are made or buried. This bowler chose the former — match after match in Qualifiers, Eliminators, and Finals, picking up wickets at a rate their league season never fully predicted. Hint at the sheer number of high-stakes appearances and what it says about their ability to be at their best when it costs the most.",
+    },
+    # ── Category 5: Longevity ──────────────────────────────────
+    {
+        "id": "most_seasons",
+        "sql": """SELECT d.batsman as answer, COUNT(DISTINCT m.year) as val,
+                  COUNT(DISTINCT d.match_id) as matches
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  GROUP BY d.batsman ORDER BY val DESC LIMIT 8""",
+        "context_sql": """SELECT SUM(d.batsman_runs) as career_runs,
+                  COUNT(DISTINCT m.year) as seasons,
+                  COUNT(DISTINCT d.batting_team) as franchises
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id WHERE d.batsman=?""",
+        "stat_label": "IPL seasons played — more than any other cricketer",
+        "prompt_hint": "Franchises change rosters every year. Younger players arrive hungry. Careers in T20 burn fast and bright. This player has been there for all of it — present in the first season, still playing nearly two decades later. Hint at the longevity, the franchises they have outlasted, and what it takes to remain wanted across 18 editions of the same competition.",
+    },
+    {
+        "id": "most_franchises",
+        "sql": """SELECT batsman as answer, COUNT(DISTINCT batting_team) as val,
+                  COUNT(DISTINCT match_id) as matches
+                  FROM deliveries GROUP BY batsman ORDER BY val DESC LIMIT 8""",
+        "context_sql": """SELECT COUNT(DISTINCT batting_team) as franchises,
+                  SUM(batsman_runs) as career_runs,
+                  COUNT(DISTINCT match_id) as matches
+                  FROM deliveries WHERE batsman=?""",
+        "stat_label": "different IPL franchises played for — more than any other player",
+        "prompt_hint": "Most IPL careers are defined by one or two franchises. This player has been picked up, released, and picked up again by franchise after franchise — not because they failed, but because every team believed they could use what this player offers. Hint at the mercenary nature of the career and the sheer number of team colours they have worn.",
+    },
+    # ── Category 6: Role Specialists ──────────────────────────
+    {
+        "id": "highest_sr_lower_order",
+        "sql": """WITH first_ball AS (
+                    SELECT match_id, batting_team, batsman,
+                           MIN(over*10+ball) as first_seq
+                    FROM deliveries WHERE is_wide=0
+                    GROUP BY match_id, batting_team, batsman
+                  ),
+                  positions AS (
+                    SELECT match_id, batting_team, batsman,
+                           DENSE_RANK() OVER (PARTITION BY match_id, batting_team ORDER BY first_seq) as bat_pos
+                    FROM first_ball
+                  )
+                  SELECT d.batsman as answer,
+                         ROUND(SUM(d.batsman_runs)*100.0/COUNT(*),1) as val,
+                         COUNT(*) as balls,
+                         COUNT(DISTINCT d.match_id) as matches
+                  FROM deliveries d
+                  JOIN positions p ON d.match_id=p.match_id AND d.batsman=p.batsman
+                  WHERE p.bat_pos >= 7 AND d.is_wide=0
+                  GROUP BY d.batsman HAVING balls >= 150
+                  ORDER BY val DESC LIMIT 8""",
+        "context_sql": """SELECT SUM(batsman_runs) as career_runs,
+                  COUNT(DISTINCT match_id) as matches,
+                  ROUND(SUM(batsman_runs)*100.0/NULLIF(SUM(CASE WHEN is_wide=0 THEN 1 ELSE 0 END),0),1) as career_sr,
+                  SUM(CASE WHEN batsman_runs=6 THEN 1 ELSE 0 END) as sixes
+                  FROM deliveries WHERE batsman=?""",
+        "stat_label": "strike rate batting at position 7 or lower (min 150 balls) — the most explosive finisher",
+        "prompt_hint": "They do not arrive to build an innings. They arrive to end one. Coming in at seven or lower, with fewer balls available than most batters face in the powerplay, this player has still managed to score faster than almost anyone. Hint at the specific role — the designated weapon of the final overs — and the strike rate that makes opposition captains rearrange their bowling plans the moment this player walks to the crease.",
+    },
+    # ── Category 7: Nearly Men ─────────────────────────────────
+    {
+        "id": "most_runs_no_title",
+        "sql": """SELECT d.batsman as answer, SUM(d.batsman_runs) as val,
+                  COUNT(DISTINCT m.year) as seasons
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  WHERE d.batsman NOT IN (
+                      SELECT DISTINCT p.player_name FROM playing_xi p
+                      JOIN matches m2 ON p.match_id=m2.match_id AND p.team=m2.winner
+                      WHERE m2.match_stage='Final'
+                  )
+                  GROUP BY d.batsman ORDER BY val DESC LIMIT 8""",
+        "context_sql": """SELECT SUM(batsman_runs) as career_runs,
+                  COUNT(DISTINCT match_id) as matches,
+                  SUM(CASE WHEN batsman_runs=6 THEN 1 ELSE 0 END) as sixes,
+                  COUNT(DISTINCT batting_team) as franchises
+                  FROM deliveries WHERE batsman=?""",
+        "stat_label": "runs in IPL history without ever winning the title — the greatest nearly man",
+        "prompt_hint": "Use the contradiction technique. By every individual batting measure, this player is among the greatest in IPL history. By the only measure that franchises ultimately care about, they have never crossed the line. Hint at the seasons, the runs, the franchises tried — and the one thing that has always been just out of reach.",
+    },
+    {
+        "id": "most_wickets_no_title",
+        "sql": """SELECT d.bowler as answer,
+                  SUM(CASE WHEN d.dismissal_kind IS NOT NULL AND d.dismissal_kind NOT IN
+                  ('run out','retired hurt','retired out','obstructing the field') THEN 1 ELSE 0 END) as val,
+                  COUNT(DISTINCT m.year) as seasons
+                  FROM deliveries d JOIN matches m ON d.match_id=m.match_id
+                  WHERE d.bowler NOT IN (
+                      SELECT DISTINCT p.player_name FROM playing_xi p
+                      JOIN matches m2 ON p.match_id=m2.match_id AND p.team=m2.winner
+                      WHERE m2.match_stage='Final'
+                  )
+                  GROUP BY d.bowler ORDER BY val DESC LIMIT 8""",
+        "context_sql": """SELECT SUM(CASE WHEN dismissal_kind IS NOT NULL AND dismissal_kind NOT IN
+                  ('run out','retired hurt','retired out','obstructing the field') THEN 1 ELSE 0 END) as wickets,
+                  COUNT(DISTINCT match_id) as matches,
+                  ROUND(SUM(batsman_runs+extras)*6.0/NULLIF(SUM(CASE WHEN is_wide=0 AND is_no_ball=0 THEN 1 ELSE 0 END),0),2) as economy,
+                  COUNT(DISTINCT batting_team) as teams_bowled_for
+                  FROM deliveries WHERE bowler=?""",
+        "stat_label": "wickets in IPL history without ever winning the title — the most decorated titleless bowler",
+        "prompt_hint": "More wickets than almost anyone who has ever bowled in the IPL. Across more than a decade of seasons, more franchises than most players know. The title has never come. Use the elimination trail — hint at the wicket count, the longevity, and the cruel gap between individual excellence and team success.",
+    },
+    # ── Category 8: Bowling Matchup ───────────────────────────
+    {
+        "id": "best_economy_vs_lefties",
+        "sql": """SELECT d.bowler as answer,
+                  ROUND(SUM(d.batsman_runs+d.extras)*6.0/NULLIF(SUM(CASE WHEN d.is_wide=0 AND d.is_no_ball=0 THEN 1 ELSE 0 END),0),2) as val,
+                  SUM(CASE WHEN d.is_wide=0 AND d.is_no_ball=0 THEN 1 ELSE 0 END) as balls
+                  FROM deliveries d
+                  WHERE d.batsman_type='Left hand Bat'
+                  GROUP BY d.bowler HAVING balls >= 200 ORDER BY val LIMIT 8""",
+        "context_sql": """SELECT ROUND(SUM(CASE WHEN d.batsman_type='Left hand Bat' THEN d.batsman_runs+d.extras ELSE 0 END)*6.0/
+                  NULLIF(SUM(CASE WHEN d.batsman_type='Left hand Bat' AND d.is_wide=0 AND d.is_no_ball=0 THEN 1 ELSE 0 END),0),2) as econ_vs_lhb,
+                  ROUND(SUM(CASE WHEN d.batsman_type='Right hand Bat' THEN d.batsman_runs+d.extras ELSE 0 END)*6.0/
+                  NULLIF(SUM(CASE WHEN d.batsman_type='Right hand Bat' AND d.is_wide=0 AND d.is_no_ball=0 THEN 1 ELSE 0 END),0),2) as econ_vs_rhb,
+                  COUNT(DISTINCT d.match_id) as matches
+                  FROM deliveries d WHERE d.bowler=?""",
+        "stat_label": "economy rate against left-handed batters (min 200 balls) — the best left-hand-bat specialist bowler",
+        "prompt_hint": "Use the wrong assumption technique. Left-handers are supposed to be the difficult matchup for this type of bowler. Opposition teams build their left-heavy lineups specifically to counter certain bowling styles. This bowler has made that plan look foolish — their economy against left-handers is actually lower than against right-handers. Hint at the bowling type and the tactical headache they create for any captain who tries to game the matchup.",
+    },
+
     # ── Phase-based templates ──────────────────────────
     {
         "id": "best_pp_sr_batter",
@@ -591,7 +858,8 @@ def generate_quiz_question() -> dict:
     if not rows:
         return None
 
-    correct      = rows[0]
+    # Pick randomly from top 8 so the same template gives different answers each session
+    correct      = random.choice(rows)
     answer_text  = correct["answer"]
     stat_value   = correct["val"]
     extra        = correct.get("extra", "")
@@ -663,7 +931,7 @@ No markdown, no backticks, no preamble."""
         raw = call_claude(
             system=system_prompt,
             user_msg=json.dumps(payload, default=str),
-            max_tokens=400,
+            max_tokens=500,
         )
         raw = re.sub(r'^```\w*\n?', '', raw)
         raw = re.sub(r'\n?```$', '', raw).strip()
